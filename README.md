@@ -1,42 +1,78 @@
 # Thread Weak-Memory Test
 
-This project contains a very small multithreaded test case that explores **weak memory behavior**.
+This project is a small multithreaded experiment that explores **weak memory behavior**.
 
-## Idea
+## What this program does
 
-Two threads run in parallel:
+The program runs a classic two-thread litmus test with four global variables:
 
-- Thread 1 writes `x = 1`, then reads `y`
-- Thread 2 writes `y = 1`, then reads `x`
+- `x` and `y`: shared variables written by different threads
+- `a` and `b`: values read back by those threads
 
-The interesting result is when both threads read `0`.
+Each iteration does the following:
 
-## Concepts
+- Thread 1:
+  1. writes `x = 1`
+  2. reads `y` into `a`
+- Thread 2:
+  1. writes `y = 1`
+  2. reads `x` into `b`
+
+In `main`, every iteration resets `x` and `y` to `0`, starts both threads, and waits for them with `pthread_join`.
+
+The loop continues until this condition is observed:
+
+- `a == 0 && b == 0`
+
+In other words, both threads read `0` in the same iteration.
+
+## Why this is interesting
+
+At first glance, you might expect at least one thread to observe the other thread’s write.  
+However, the `a == 0 && b == 0` result can still appear in practice due to:
+
+- hardware and compiler reordering
+- store buffering and delayed visibility across cores
+- missing synchronization primitives (for example, atomics or fences)
+
+This demonstrates that without explicit synchronization, cross-thread memory visibility and ordering are not reliable.
+
+## Memory-model context
 
 ### Sequential consistency
-Under **sequential consistency**, all operations appear to happen in one global order that is consistent with the program order of each thread. In that model, the result where both threads read `0` is not expected.
 
-### Weak memory
-Real systems are often **not sequentially consistent** by default. CPUs and memory subsystems may allow loads and stores to become visible in different orders, which can make surprising results possible.
+Under **sequential consistency**, all operations appear in one global order that preserves each thread’s program order.  
+In that model, both threads reading `0` is not expected.
+
+### Weak memory behavior
+
+Real systems are often not sequentially consistent by default.  
+CPUs and memory subsystems may expose loads/stores in different orders across threads, enabling surprising outcomes.
 
 ### Compiler effects
-Compilers may also reorder or optimize memory operations unless synchronization primitives or atomics are used. This means a test like this can be affected by both **hardware memory behavior** and **compiler optimization**.
 
-### CPU architecture
-The probability of observing weak-memory effects depends on the CPU architecture:
+Compilers may also reorder or optimize memory operations unless synchronization is used.  
+So this experiment can reflect both hardware-level and compiler-level effects.
 
-- **x86** is relatively strong
-- **ARM** is generally weaker
-- behavior can also vary by microarchitecture, OS scheduler, and optimization level
+### Architecture dependence
 
-## This program as a test case
+How often weak-memory outcomes appear depends on platform details, including:
 
-`main.c` implements a classic two-thread litmus test. It is useful as a simple experiment, but without atomic operations it is not a fully reliable memory-model test in standard C, because unsynchronized concurrent accesses can cause undefined behavior.
+- CPU architecture (for example, x86 vs ARM)
+- microarchitecture
+- optimizer settings
+- OS scheduling behavior
+
+## Important caveat
+
+In standard C, this code uses plain shared variables with unsynchronized concurrent access, which is a **data race** and therefore **undefined behavior**.
+
+So while this is useful as an educational experiment, it is not a formally correct memory-model benchmark in portable C.
 
 ## Takeaway
 
-This program is a small educational example that helps illustrate:
+This test is a compact teaching example for:
 
-- why multithreaded code can behave unexpectedly
-- why **atomics**, **memory ordering**, and **synchronization** matter
+- why multithreaded behavior can be surprising
+- why atomics, memory ordering, and synchronization matter
 - why results may differ across compilers and CPU architectures
